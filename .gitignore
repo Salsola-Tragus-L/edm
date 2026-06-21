@@ -1,0 +1,57 @@
+# Local datasets and experiment outputs
+data/
+logs/
+outputs/
+results/
+runs/
+wandb/
+checkpoints/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Jupyter/IPython local files
+.ipynb_checkpoints/
+.ipython/
+
+# Virtual environments and local secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Editor and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Common model/checkpoint/data artifacts
+*.ckpt
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
