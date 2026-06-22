@@ -63,6 +63,11 @@ def configure_topology(config: Dict[str, Any]) -> Topology:
         return StarTopology(num_workers=config["distributed_world_size"])
     elif config["topology"] == "chain":
         return ChainTopology(num_workers=config["distributed_world_size"])
+    elif config["topology"] == "grid":
+        return GridTopology(
+            num_workers=config["distributed_world_size"],
+            num_rows=config.get("num_rows_for_grid"),
+        )
     elif config["topology"] == "3-tree":
         return TreeTopology(num_workers=config["distributed_world_size"], max_degree=3)
     elif config["topology"] == "binary-tree":
@@ -118,6 +123,48 @@ class RingTopology(Topology):
         i = worker
         n = self.num_workers
         return [(i - 1) % n, (i + 1) % n]
+
+
+class GridTopology(Topology):
+    def __init__(self, num_workers, num_rows=None):
+        super().__init__(num_workers=num_workers)
+        if num_workers < 1:
+            raise ValueError("num_workers must be positive")
+
+        if num_rows is None:
+            num_rows = self._infer_num_rows(num_workers)
+        elif num_rows < 1:
+            raise ValueError("num_rows must be positive")
+        elif num_workers % num_rows != 0:
+            raise ValueError(
+                "Unable to generate a strict grid graph: num_workers must be divisible by num_rows."
+            )
+
+        self.num_rows = num_rows
+        self.num_cols = num_workers // num_rows
+
+    @staticmethod
+    def _infer_num_rows(num_workers):
+        for candidate in range(int(math.sqrt(num_workers)), 0, -1):
+            if num_workers % candidate == 0:
+                return candidate
+        return 1
+
+    def neighbors(self, worker):
+        row = worker // self.num_cols
+        col = worker % self.num_cols
+        neighbors = []
+
+        if row > 0:
+            neighbors.append(worker - self.num_cols)
+        if row < self.num_rows - 1:
+            neighbors.append(worker + self.num_cols)
+        if col > 0:
+            neighbors.append(worker - 1)
+        if col < self.num_cols - 1:
+            neighbors.append(worker + 1)
+
+        return neighbors
 
 
 class HyperCubeTopology(Topology):

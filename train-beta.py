@@ -30,7 +30,7 @@ from utils.communication import (
 parser = argparse.ArgumentParser()
 
 # Add a positional argument for the path
-parser.add_argument('--path', type=str, help='File path',default="/root/autodl-tmp/relaysgd/")
+parser.add_argument('--path', type=str, help='File path',default="/root/autodl-tmp/edm/")
 
 # Parse command line arguments
 args = parser.parse_args()

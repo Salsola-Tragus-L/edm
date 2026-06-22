@@ -304,7 +304,7 @@ class CifarDataset(PyTorchDataset):
     max_batch_size = 128
 
     def __init__(
-        self, split, data_root='/root/autodl-tmp/relaysgd/data', device="cuda"
+        self, split, data_root='/root/autodl-tmp/edm/data', device="cuda"
     ):
         if split == "train":
             transform = torchvision.transforms.Compose(
