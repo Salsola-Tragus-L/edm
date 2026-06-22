@@ -66,7 +66,7 @@ for seed in [1]:                                      # [2,3]
                     for alg in alg_list:
                         config = {**base_config,
                                 "learning_rate": lr,
-                                "momentum": 0.9,
+                                "momentum": mom,
                                 # "momentum": 0,
                                 "topology": topology,
                                 "non_iid_alpha": alpha,
