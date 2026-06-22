@@ -73,10 +73,10 @@ for seed in [1]:                                      # [2,3]
                                 "seed": seed,
                                 "algorithm": alg}
                         job_name = "{task}-{model_name}/alpha{non_iid_alpha}-{algorithm}-{topology}-mom{momentum}-lr{learning_rate}-seed{seed}".format(**config)
-                        logdir = "/root/autodl-tmp/relaysgd/logs-{}/".format(which_exp)+job_name + '/'
+                        logdir = "/root/autodl-tmp/edm/logs-{}/".format(which_exp)+job_name + '/'
                         if not os.path.isdir(logdir):
                             os.makedirs(logdir)
                         np.save(logdir+'config.npy', config)
-                        run_cmd('mpirun -np {} python /root/autodl-tmp/relaysgd/train.py --path "{}"'.format(num_workers, logdir))
+                        run_cmd('mpirun -np {} python /root/autodl-tmp/edm/train.py --path "{}"'.format(num_workers, logdir))
 
 os.system("shutdown -s -t 10")
