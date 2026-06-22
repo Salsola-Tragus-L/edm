@@ -1,6 +1,6 @@
 # Local datasets and experiment outputs
 data/
-logs/
+/log*/
 outputs/
 results/
 runs/
