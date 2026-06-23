@@ -49,6 +49,8 @@ def train(
         yield from d2(config, task, timer)
     elif config["algorithm"] == "edm":
         yield from edm(config, task, timer)
+    elif config["algorithm"] == "caedm":
+        yield from caedm(config, task, timer)
     elif config["algorithm"] == "gradient-tracking":
         yield from gradient_tracking(config, task, timer)
     elif config["algorithm"] == "quasi-global-momentum":
@@ -766,6 +768,91 @@ def edm(config, task: Task, timer: Timer):
                 for p, prev, u in zip(unpack(buffer, shapes), prev_parameters, updates)
             ]
             
+
+def caedm(config, task: Task, timer: Timer):
+    assert not config["overlap_communication"]
+    assert config["base_optimizer"] == "SGD"
+    last_loss = None
+
+    topology = configure_topology(config)
+    assert not isinstance(topology, list)
+    eta_w = config.get("lca_eta_w", config.get("eta_w", None))
+    if eta_w is None:
+        if topology.num_workers <= 1:
+            lambda_w = 0.0
+        else:
+            w = topology.gossip_matrix(get_gossip_weight(config))
+            eigenvalues = np.linalg.eigvalsh(w.detach().cpu().numpy())
+            lambda_w = sorted(np.abs(eigenvalues).tolist())[-2]
+        eta_w = 1.0 / (1.0 + math.sqrt(max(0.0, 1.0 - lambda_w * lambda_w)))
+
+    if topology.num_workers <= 1:
+        gossip = None
+    else:
+        gossip = MultiTopologyGossipMechanism(
+            topology,
+            gossip_matrix=get_gossip_weight(config),
+            message_drop_prob=config["simulated_dropped_message_probability"],
+        )
+
+    def lca_combine(values, lower_values):
+        buffer, shapes = pack(values)
+        if gossip is not None:
+            gossip.send(buffer)
+            gossip.gossip_update(buffer)
+        lower_buffer, _ = pack(lower_values)
+        buffer.mul_(1 + eta_w).add_(lower_buffer, alpha=-eta_w)
+        return unpack(buffer, shapes)
+
+    def bytes_sent():
+        return 0 if gossip is None else gossip.bytes_sent
+
+    parameters, state = task.initialize(seed=config["seed"])
+    lower_parameters = [p.clone() for p in parameters]
+    psi = [p.clone() for p in parameters]
+    momentum = [torch.zeros_like(p) for p in parameters]
+
+    for step, batch in task.data.iterator(
+        batch_size=config["batch_size"],
+        shuffle=True,
+        ref_num_data=task.mean_num_data_per_worker,
+    ):
+        timer.epoch = step
+        yield (
+            TrainStats(step, bytes_sent()),
+            BatchStats(loss=last_loss),
+            parameters,
+            state,
+        )
+
+        with timer("compute_grad"):
+            last_loss, gradients, state = task.loss_and_gradient(
+                parameters, state, batch
+            )
+
+        with timer("local_update"):
+            beta = config["momentum"]
+            lr = config["learning_rate"] * learning_rate_schedule(config, step)
+            for m, g in zip(momentum, gradients):
+                m.mul_(beta).add_(g, alpha=1 - beta)
+            next_psi = [
+                x.clone().add_(m, alpha=-lr)
+                for x, m in zip(parameters, momentum)
+            ]
+            phi = [
+                ps_next + x - ps
+                for ps_next, x, ps in zip(next_psi, parameters, psi)
+            ]
+            lower_phi = [
+                ps_next + x_lower - ps
+                for ps_next, x_lower, ps in zip(next_psi, lower_parameters, psi)
+            ]
+
+        with timer("communication"):
+            parameters = lca_combine(phi, lower_phi)
+            lower_parameters = phi
+            psi = next_psi
+
 
 def decent_lam(config, task: Task, timer: Timer):
     assert not config["overlap_communication"]
