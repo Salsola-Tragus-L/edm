@@ -851,7 +851,7 @@ def caedm(config, task: Task, timer: Timer):
         with timer("communication"):
             parameters = lca_combine(phi, lower_phi)
             lower_parameters = phi
-            psi = next_psi
+            psi = [p.clone() for p in next_psi]
 
 
 def decent_lam(config, task: Task, timer: Timer):
