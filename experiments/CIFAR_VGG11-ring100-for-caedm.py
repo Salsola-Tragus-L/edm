@@ -42,6 +42,7 @@ base_config = {
     "test_interval":2,
     "simulated_dropped_message_probability":0.0,
     "K":3,
+    "gossip_weight": 1/5  # 除了自身之外的所有节点的权重
 }
 
 def run_cmd(cmd_str='', echo_print=1):
