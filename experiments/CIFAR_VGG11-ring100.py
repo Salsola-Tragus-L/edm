@@ -4,6 +4,7 @@ import os
 import json
 import subprocess
 import os,sys 
+import signal
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
 sys.path.insert(0,parentdir) 
 from train import main
@@ -59,13 +60,37 @@ def run_cmd(cmd_str='', echo_print=1):
         stderr=subprocess.STDOUT,
         universal_newlines=True,
         bufsize=1,
+        preexec_fn=os.setsid if hasattr(os, "setsid") else None,
     )
     has_diverged = False
-    for line in process.stdout:
-        print(line, end="")
-        if "RuntimeError: diverged" in line:
-            has_diverged = True
-    process.wait()
+    def stop_process():
+        if hasattr(os, "killpg"):
+            os.killpg(process.pid, signal.SIGTERM)
+        else:
+            process.terminate()
+
+    try:
+        for line in process.stdout:
+            print(line, end="")
+            if "RuntimeError: diverged" in line:
+                has_diverged = True
+                stop_process()
+                break
+        try:
+            process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+    except KeyboardInterrupt:
+        stop_process()
+        try:
+            process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        if has_diverged:
+            return process.returncode, has_diverged
+        raise
     return process.returncode, has_diverged
 
 
