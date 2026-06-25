@@ -786,6 +786,7 @@ def caedm(config, task: Task, timer: Timer):
             lambda_w = sorted(np.abs(eigenvalues).tolist())[-2]
         sqrt_gap = math.sqrt(max(0.0, 1.0 - lambda_w))
         gamma = (1.0 - sqrt_gap) / (1.0 + sqrt_gap)
+    print("\%\%\%\%\%\%\%\%\%\% Present gamma = {}\n".format(gamma))
 
     gossip = MultiTopologyGossipMechanism(
         topology,
