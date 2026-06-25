@@ -776,40 +776,27 @@ def caedm(config, task: Task, timer: Timer):
 
     topology = configure_topology(config)
     assert not isinstance(topology, list)
-    eta_w = config.get("lca_eta_w", config.get("eta_w", None))
-    if eta_w is None:
+    gamma = config.get("caedm_gamma", config.get("gamma", None))
+    if gamma is None:
         if topology.num_workers <= 1:
             lambda_w = 0.0
         else:
             w = topology.gossip_matrix(get_gossip_weight(config))
             eigenvalues = np.linalg.eigvalsh(w.detach().cpu().numpy())
             lambda_w = sorted(np.abs(eigenvalues).tolist())[-2]
-        eta_w = 1.0 / (1.0 + math.sqrt(max(0.0, 1.0 - lambda_w * lambda_w)))
+        sqrt_gap = math.sqrt(max(0.0, 1.0 - lambda_w))
+        gamma = (1.0 - sqrt_gap) / (1.0 + sqrt_gap)
 
-    if topology.num_workers <= 1:
-        gossip = None
-    else:
-        gossip = MultiTopologyGossipMechanism(
-            topology,
-            gossip_matrix=get_gossip_weight(config),
-            message_drop_prob=config["simulated_dropped_message_probability"],
-        )
-
-    def lca_combine(values, lower_values):
-        buffer, shapes = pack(values)
-        if gossip is not None:
-            gossip.send(buffer)
-            gossip.gossip_update(buffer)
-        lower_buffer, _ = pack(lower_values)
-        buffer.mul_(1 + eta_w).add_(lower_buffer, alpha=-eta_w)
-        return unpack(buffer, shapes)
-
-    def bytes_sent():
-        return 0 if gossip is None else gossip.bytes_sent
+    gossip = MultiTopologyGossipMechanism(
+        topology,
+        gossip_matrix=get_gossip_weight(config),
+        message_drop_prob=config["simulated_dropped_message_probability"],
+    )
 
     parameters, state = task.initialize(seed=config["seed"])
-    lower_parameters = [p.clone() for p in parameters]
-    psi = [p.clone() for p in parameters]
+    base_optimizer = configure_base_optimizer(config)
+    base_optimizer_state = base_optimizer.init(parameters)
+    correction = [torch.zeros_like(p) for p in parameters]
     momentum = [torch.zeros_like(p) for p in parameters]
 
     for step, batch in task.data.iterator(
@@ -819,7 +806,7 @@ def caedm(config, task: Task, timer: Timer):
     ):
         timer.epoch = step
         yield (
-            TrainStats(step, bytes_sent()),
+            TrainStats(step, gossip.bytes_sent),
             BatchStats(loss=last_loss),
             parameters,
             state,
@@ -831,27 +818,30 @@ def caedm(config, task: Task, timer: Timer):
             )
 
         with timer("local_update"):
-            beta = config["momentum"]
-            lr = config["learning_rate"] * learning_rate_schedule(config, step)
             for m, g in zip(momentum, gradients):
-                m.mul_(beta).add_(g, alpha=1 - beta)
-            next_psi = [
-                x.clone().add_(m, alpha=-lr)
-                for x, m in zip(parameters, momentum)
-            ]
-            phi = [
-                ps_next + x - ps
-                for ps_next, x, ps in zip(next_psi, parameters, psi)
-            ]
-            lower_phi = [
-                ps_next + x_lower - ps
-                for ps_next, x_lower, ps in zip(next_psi, lower_parameters, psi)
-            ]
+                m.mul_(config["momentum"]).add_(g, alpha = 1-config["momentum"])
+            prev_parameters = [p.clone() for p in parameters]
+            base_optimizer.step(
+                parameters,
+                momentum,
+                base_optimizer_state,
+                lr=config["learning_rate"] * learning_rate_schedule(config, step),
+            )
+            updates = [p - prev for p, prev in zip(parameters, prev_parameters)]
+            for p, prev, u, c in zip(parameters, prev_parameters, updates, correction):
+                p.data.copy_(prev + gamma * (u + c))
 
         with timer("communication"):
-            parameters = lca_combine(phi, lower_phi)
-            lower_parameters = phi
-            psi = [p.clone() for p in next_psi]
+            buffer, shapes = pack(parameters)
+            gossip.send(buffer)
+            gossip.gossip_update(buffer)
+            parameters = unpack(buffer, shapes)
+
+        with timer("update_correction"):
+            correction = [
+                p - prev - u
+                for p, prev, u in zip(unpack(buffer, shapes), prev_parameters, updates)
+            ]
 
 
 def decent_lam(config, task: Task, timer: Timer):
