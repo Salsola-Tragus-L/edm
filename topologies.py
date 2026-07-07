@@ -68,6 +68,10 @@ def configure_topology(config: Dict[str, Any]) -> Topology:
             num_workers=config["distributed_world_size"],
             num_rows=config.get("num_rows_for_grid"),
         )
+    elif config["topology"] in ["grid3D", "grid3d"]:
+        return Grid3DTopology(num_workers=config["distributed_world_size"])
+    elif config["topology"] in ["grid4D", "grid4d"]:
+        return Grid4DTopology(num_workers=config["distributed_world_size"])
     elif config["topology"] == "3-tree":
         return TreeTopology(num_workers=config["distributed_world_size"], max_degree=3)
     elif config["topology"] == "binary-tree":
@@ -125,6 +129,35 @@ class RingTopology(Topology):
         return [(i - 1) % n, (i + 1) % n]
 
 
+def infer_grid_dimensions(num_workers, num_dimensions):
+    if num_workers < 1:
+        raise ValueError("num_workers must be positive")
+    if num_dimensions < 1:
+        raise ValueError("num_dimensions must be positive")
+
+    dimensions = []
+    remaining_workers = num_workers
+    for remaining_dimensions in range(num_dimensions, 1, -1):
+        max_factor = _integer_nth_root(remaining_workers, remaining_dimensions)
+        for factor in range(max_factor, 0, -1):
+            if remaining_workers % factor == 0:
+                dimensions.append(factor)
+                remaining_workers //= factor
+                break
+
+    dimensions.append(remaining_workers)
+    return tuple(dimensions)
+
+
+def _integer_nth_root(value, degree):
+    root = int(value ** (1 / degree))
+    while (root + 1) ** degree <= value:
+        root += 1
+    while root ** degree > value:
+        root -= 1
+    return root
+
+
 class GridTopology(Topology):
     def __init__(self, num_workers, num_rows=None):
         super().__init__(num_workers=num_workers)
@@ -165,6 +198,41 @@ class GridTopology(Topology):
             neighbors.append(worker + 1)
 
         return neighbors
+
+
+class GridNDTopology(Topology):
+    def __init__(self, num_workers, num_dimensions):
+        super().__init__(num_workers=num_workers)
+        self.dimensions = infer_grid_dimensions(num_workers, num_dimensions)
+        self.strides = []
+        for dim in range(num_dimensions):
+            stride = 1
+            for size in self.dimensions[dim + 1:]:
+                stride *= size
+            self.strides.append(stride)
+
+    def neighbors(self, worker):
+        neighbors = []
+        for size, stride in zip(self.dimensions, self.strides):
+            coordinate = (worker // stride) % size
+            if coordinate > 0:
+                neighbors.append(worker - stride)
+            if coordinate < size - 1:
+                neighbors.append(worker + stride)
+
+        return neighbors
+
+
+class Grid3DTopology(GridNDTopology):
+    def __init__(self, num_workers):
+        super().__init__(num_workers=num_workers, num_dimensions=3)
+        self.num_x, self.num_y, self.num_z = self.dimensions
+
+
+class Grid4DTopology(GridNDTopology):
+    def __init__(self, num_workers):
+        super().__init__(num_workers=num_workers, num_dimensions=4)
+        self.num_w, self.num_x, self.num_y, self.num_z = self.dimensions
 
 
 class HyperCubeTopology(Topology):
