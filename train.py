@@ -75,10 +75,17 @@ def main():
     # np.save(path+'loss.npy', loss_epoch)
     # np.save(path+'test.npy', test_epoch)
 
-        
+    next_test_epoch = 0
+
     for train_stats, batch_stats, parameters, state in train(config, task, timer):
         epoch = train_stats.step
         training_time = {"epoch": epoch, "mb": train_stats.bytes_sent / 1024 / 1024}
+        should_test = (
+            epoch >= next_test_epoch or epoch >= config["num_epochs"]
+        )
+        if should_test:
+            record_epoch = min(next_test_epoch, config["num_epochs"])
+            next_test_epoch += config["test_interval"]
 
         if batch_stats.loss is not None:
             # loss_epoch = np.load(path+'loss.npy',allow_pickle=True).item()
@@ -92,7 +99,7 @@ def main():
                 raise RuntimeError("diverged")
                 
         ## loss_meanx f(\bar{x})
-        if epoch % config["test_interval"] == 0:
+        if should_test:
             with timer("global_loss_calculation"):
                 parameters_meanx = [p.clone() for p in parameters]
                 buffer, shapes = pack(parameters_meanx)
@@ -101,21 +108,21 @@ def main():
                 parameters_meanx = unpack(buffer, shapes)
                 mean_stats = task.evaluate(task.data, parameters_meanx, state)
                 
-                if(epoch not in loss_meanx.keys()):
-                    loss_meanx[epoch] = []
-                loss_meanx[epoch].append(mean_stats)
+                if(record_epoch not in loss_meanx.keys()):
+                    loss_meanx[record_epoch] = []
+                loss_meanx[record_epoch].append(mean_stats)
                 
         ## training loss f(x_i)
-        if epoch % config["test_interval"] == 0:
+        if should_test:
             with timer("training_loss_for_f"):
                 train_fxi_stats = task.evaluate(task._train_data_total, parameters, state)
                 
-                if(epoch not in loss_fxi.keys()):
-                    loss_fxi[epoch] = []
-                loss_fxi[epoch].append(train_fxi_stats)
+                if(record_epoch not in loss_fxi.keys()):
+                    loss_fxi[record_epoch] = []
+                loss_fxi[record_epoch].append(train_fxi_stats)
                 
         ## training ||x - x_i||^2
-        if epoch % config["test_interval"] == 0:
+        if should_test:
             with timer("cal_var_localx"):
                 squared_diffs = []
                 for param, param_meanx in zip(parameters, parameters_meanx):
@@ -125,19 +132,19 @@ def main():
                     
                 total_squared_diff = sum(s.sum().item() for s in squared_diffs)
                 
-                if(epoch not in var_localx.keys()):
-                    var_localx[epoch] = []
-                var_localx[epoch].append(total_squared_diff)
+                if(record_epoch not in var_localx.keys()):
+                    var_localx[record_epoch] = []
+                var_localx[record_epoch].append(total_squared_diff)
                 
         ## test_loss f(x_i)
-        if epoch % config["test_interval"] == 0:
+        if should_test:
             with timer("test"):
                 test_stats = task.evaluate(task._test_data, parameters, state)
                 
                 # test_epoch = np.load(path+'test.npy',allow_pickle=True).item()
-                if(epoch not in test_epoch.keys()):
-                    test_epoch[epoch] = []
-                test_epoch[epoch].append(test_stats)
+                if(record_epoch not in test_epoch.keys()):
+                    test_epoch[record_epoch] = []
+                test_epoch[record_epoch].append(test_stats)
                 
                 for key, value in test_stats.items():
                     log_metric(
@@ -147,7 +154,7 @@ def main():
                     )
 
         # if (epoch <= 5 and (epoch % 1 == 0)) or epoch % config["test_interval"] == 0:
-        if epoch % config["test_interval"] == 0 and get_rank()==0:
+        if should_test and get_rank()==0:
             # print('time!!!!!!!!!!!')
             for entry in timer.transcript():
                 print( entry["event"], entry["mean"], entry["std"], entry["instances"])
