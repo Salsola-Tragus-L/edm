@@ -106,9 +106,9 @@ alg_list = ["edm","dsmt","dmsgt_hb","quasi-global-momentum","decent_lam"]
 
 for seed in [1]:                                      # [2,3]
     for alpha in [0.1]:
-        for mom in [0.8, 0.9, 0.95, 0.98, 0.99]:                               # [1, 0.1, 0.01]
-            for topology in ["grid3D", "grid4D"]:                     # ['fully-connected'], ["ring"]
-                for lr in [0.01, 0.025, 0.05, 0.1, 0.2]:
+        for topology in ["grid3D", "grid4D"]:                     # ['fully-connected'], ["ring"]
+            for mom in [0.8, 0.9, 0.95, 0.98, 0.99]:                               # [1, 0.1, 0.01]
+                for lr in [0.5]:                             ## [0.01,0.025,0.05,0.1,0.2]
                     for alg in alg_list:
                         config = {**base_config,
                                 "learning_rate": lr,
