@@ -6,6 +6,7 @@ loop and wraps only the MNIST logistic task's reporting methods.
 """
 
 from functools import wraps
+import os
 
 import train as base_train
 
@@ -62,4 +63,7 @@ base_train.configure_task = configure_logistic_l2_task
 
 
 if __name__ == "__main__":
+    # train.py builds output filenames with string concatenation (path + name),
+    # so its path must end with a directory separator.
+    base_train.path = os.path.join(base_train.path, "")
     base_train.main()
