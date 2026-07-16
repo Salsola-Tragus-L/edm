@@ -13,7 +13,7 @@ num_workers = 16
 
 which_exp = "MNIST-logisticL2-ring100step-beta-lr"
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-train_script = os.path.join(project_root, "train.py")
+train_script = os.path.join(project_root, "train_logistic_l2.py")
 log_root = os.environ.get("RELAYSGD_LOG_ROOT", "/root/autodl-tmp/edm")
 diverge_hist_path = os.path.join(log_root, f"logs-{which_exp}", "diverge_hist.txt")
 
