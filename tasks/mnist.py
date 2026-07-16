@@ -80,6 +80,8 @@ class MNISTTask(Task):
         else:
             self.mean_num_data_per_worker = len(self.data)
 
+        # Keep an unsplit copy for evaluating f(x_i) on the full training set.
+        self._train_data_total = MNISTDataset("train", device=self._device)
         self._test_data = MNISTDataset("test", device=self._device)
 
         self._model_name = model_name
