@@ -32,6 +32,17 @@ class Net(nn.Module):
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         return F.log_softmax(x,dim=1)
+
+
+class LogisticRegression(nn.Module):
+    """Multiclass logistic regression for 28x28 MNIST images."""
+
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(28 * 28, 10)
+
+    def forward(self, x):
+        return self.linear(torch.flatten(x, start_dim=1))
     
 class MNISTTask(Task):
     def __init__(
@@ -96,8 +107,8 @@ class MNISTTask(Task):
     ) -> Tuple[Loss, State]:
         with torch.no_grad():
             with fork_rng_with_seed(random_seed):
-                output, state = self.forward(
-                    batch._y, parameters, state, is_training=True
+                output, state = self._forward(
+                    batch._x, parameters, state, is_training=True
                 )
         loss = self._criterion(output, batch._y).item()
         return loss, state
@@ -180,7 +191,11 @@ class MNISTTask(Task):
     #     model.train()
     #     return model
     def _create_model(self):
-        if self._model_name == "ResNet20":
+        if self._model_name in ("Logistic-L2", "Logistic"):
+            model = LogisticRegression()
+            model.to(self._device)
+            model.train()
+        elif self._model_name == "ResNet20":
             from .models.resnet20 import ResNet20
 
             model = ResNet20()
@@ -192,6 +207,8 @@ class MNISTTask(Task):
             model = vgg11()
             model.to(self._device)
             model.train()
+        else:
+            raise ValueError(f"Unknown MNIST model '{self._model_name}'.")
         return model
 
 
