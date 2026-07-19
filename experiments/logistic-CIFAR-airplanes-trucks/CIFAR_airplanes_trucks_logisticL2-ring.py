@@ -46,6 +46,29 @@ def run_worker():
 
     task_module = load_task_module()
     original_train = base_train.train
+    original_init_distributed = base_train.init_distributed_pytorch
+
+    def init_distributed_for_selected_device():
+        requested = os.environ.get("RELAYSGD_DEVICE", "auto").strip().lower()
+        if requested != "cpu":
+            return original_init_distributed()
+
+        # Keep the MPI process group used by the decentralized algorithms, but
+        # do not execute train.py's unconditional torch.cuda.set_device().
+        if base_train.config["distributed_world_size"] > 1:
+            if base_train.config["distributed_backend"] != "mpi":
+                raise ValueError("The CPU adapter currently expects the MPI backend.")
+            print("Initializing with MPI on CPU")
+            torch.distributed.init_process_group("mpi")
+            print(
+                "Rank",
+                torch.distributed.get_rank(),
+                "world size",
+                torch.distributed.get_world_size(),
+                "device cpu",
+            )
+
+    base_train.init_distributed_pytorch = init_distributed_for_selected_device
 
     def train_with_distance_to_xstar(config, task, timer):
         artifact = torch.load(config["xstar_path"], map_location=task._device)

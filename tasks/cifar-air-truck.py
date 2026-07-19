@@ -30,6 +30,22 @@ TRUCK_CLASS = 9
 DEFAULT_DATA_ROOT = os.environ.get("RELAYSGD_DATA_ROOT", "/root/autodl-tmp/edm/data")
 
 
+def configured_device():
+    requested = os.environ.get("RELAYSGD_DEVICE", "auto").strip().lower()
+    if requested == "cpu":
+        return torch.device("cpu")
+    if requested in ("cuda", "gpu"):
+        if not torch.cuda.is_available():
+            raise RuntimeError("RELAYSGD_DEVICE requests CUDA, but CUDA is unavailable.")
+        return torch.device("cuda")
+    if requested != "auto":
+        raise ValueError(
+            "RELAYSGD_DEVICE must be 'auto', 'cpu', or 'cuda', got "
+            f"{requested!r}."
+        )
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 class BinaryLogisticRegression(nn.Module):
     """A bias-free linear classifier on flattened 32 x 32 RGB images."""
 
@@ -146,7 +162,7 @@ class CIFARAirTruckTask(Task):
         if weight_decay <= 0:
             raise ValueError("weight_decay must be positive for strong convexity.")
 
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._device = configured_device()
         full_train = CIFARAirTruckDataset("train", device=self._device)
         self.max_batch_size = full_train.max_batch_size
 
