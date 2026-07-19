@@ -105,7 +105,7 @@ class PyTorchDataset:
             batch_size=batch_size,
             shuffle=shuffle,
             pin_memory=(self._device.type == "cuda"),
-            drop_last=True,
+            drop_last=True if repeat else False,
             # This module's requested filename contains a hyphen and is loaded
             # dynamically by the experiment adapter.  Worker subprocesses
             # cannot import that name reliably (notably with Windows spawn).
